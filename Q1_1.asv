@@ -1,0 +1,119 @@
+clc, clear, close all;
+t=300;%问题一要求运行时间为300秒
+[V,X,Y]=func(t);%封装函数 输入t输出速度和坐标
+
+function [V,X,Y]=func(t)
+P=55;%螺距55cm
+a=0;
+b=P/(2*pi);%间距系数
+body_num=223;%板凳总量
+theta=zeros(1,body_num+1);%初始化极坐标存储
+V=100;%龙头速度100cm/s
+S=V*t;%龙头移动弧长
+theta_start=16*2*pi;%第16圈出发
+theta(1)=solve_theta_from_arc_length(S,theta_start);%初始化龙头位置
+lp_head=286;%板子参数
+lp_body=165;
+%迭代把手角坐标
+for i=1:body_num
+    if i==1
+        theta(i+1)=solve_theta2(theta(i),lp_head);
+    else
+        theta(i+1)=solve_theta2(theta(i),lp_body);
+    end
+end
+%通过阿基米德螺旋线反解与原点的半径
+R=get_length(theta);
+V=zeros(1, body_num + 1);%初始化存储
+V(1)=100;%龙头速度
+%迭代把手速度
+for i=1:body_num
+    V(i+1)=V(i)*theta(i)/theta
+end
+V=V';
+X=R.*cos(theta);
+Y=R.*sin(theta);
+X=X';
+Y=Y';
+%画画
+figure(1);
+hold on;
+axis equal;
+grid on;
+theta_values=linspace(0,theta_start,1000);
+R_values=get_length(theta_values);
+X_values=R_values.*cos(theta_values);
+Y_values=R_values.*sin(theta_values);
+plot(X_values,Y_values,'k-','LineWidth',1);%阿基米德螺线
+xlabel('X坐标/cm');
+ylabel('Y坐标/cm');
+% 画板凳
+for i=1:length(X)-1
+    %板凳水平向量
+    dx=X(i+1)-X(i);
+    dy=Y(i+1)-Y(i);
+    length_vec=sqrt(dx^2+dy^2);
+    %水平单位向量
+    unit_vec=[dx,dy]/length_vec;
+    %垂直单位向量
+    perp_vec=[-unit_vec(2),unit_vec(1)];
+    % 画矩形边界
+    p1=[X(i),Y(i)]+perp_vec*15-unit_vec*27.5;
+    p2=[X(i+1),Y(i+1)]+perp_vec*15+unit_vec*27.5;
+    p3=[X(i+1),Y(i+1)]-perp_vec*15+unit_vec*27.5;
+    p4=[X(i),Y(i)]-perp_vec*15-unit_vec*27.5;
+    fill([p1(1),p2(1),p3(1),p4(1)],[p1(2),p2(2),p3(2),p4(2)],'r','FaceAlpha',0.2,'EdgeColor','b');
+end
+%坐标原点（螺旋中心）
+scatter(0,0,'filled','r');
+%画龙点睛
+scatter(X(2:end),Y(2:end),10,'filled','o','MarkerFaceColor','b','MarkerEdgeColor','b');
+scatter(X(1),Y(1),10,'filled','o','MarkerFaceColor','r','MarkerEdgeColor','r');
+hold off;
+end
+
+% 计算尾部节点角度的函数
+function theta2 = solve_theta2(theta1, X)
+P=55;%螺距55cm
+a=0;
+b=P/(2*pi);%间距系数
+L1=get_length(theta1);
+%搜索拟合角度
+theta2_initial_guess=theta1+X/L1;
+L2 = @(theta2) get_length(theta2);
+distance_function=@(theta2) sqrt(L1^2 +L2(theta2)^2-2*L1*L2(theta2)*cos(theta1-theta2))-X;
+options=optimoptions('fsolve','Display','off');
+theta2=fsolve(distance_function,theta2_initial_guess,options);
+if theta2<=theta1
+    theta2_initial_guess=theta1+abs(theta2_initial_guess-theta1)+1e-6;%增加步长
+    theta2=fsolve(distance_function, theta2_initial_guess, options);
+end
+end
+
+%计算螺旋线半径
+function R=get_length(theta)
+P=55;%螺距55cm
+a=0;
+b=P/(2*pi);%间距系数
+R=a+b*theta;
+end
+
+% 弧长反解转角
+function theta = solve_theta_from_arc_length(L,theta_start)
+P=55;%螺距55cm
+a=0;
+b=P/(2*pi);%间距系数
+arc_length_diff=@(theta) get_arc_length(theta_start,theta)-L;
+theta_initial_guess=theta_start-L/b;
+options=optimoptions('fsolve','Display','off');
+theta=fsolve(arc_length_diff,theta_initial_guess, options);
+end
+
+% 定积分求解弧路径长度
+function L = get_arc_length(theta_start,theta)
+P=55;%螺距55cm
+a=0;
+b=P/(2*pi);%间距系数
+arc_length = @(theta) sqrt(b^2+(a+b*theta).^2);
+L=integral(arc_length,theta,theta_start);
+end
